@@ -35,6 +35,9 @@ export class RemoteActor implements TableActor {
   protected decisions = 0;
   protected reconnections = 0;
   protected slowestMs = 0;
+  /** Messages waiting for the next write: one write per tick costs far less than one per message. */
+  protected outgoing = '';
+  protected flushScheduled = false;
 
   constructor(options: RemoteActorOptions) {
     this.options = options;
@@ -63,6 +66,8 @@ export class RemoteActor implements TableActor {
     }
     this.socket = socket;
     this.buffer.reset();
+    // what was queued for the old connection is not replayed on the new one
+    this.outgoing = '';
     socket.on('data', (chunk: string) => {
       for (const line of this.buffer.push(chunk)) this.handleLine(line);
     });
@@ -127,6 +132,7 @@ export class RemoteActor implements TableActor {
 
   /** Ends the connection: the tournament is over. */
   public close(): void {
+    this.flush();
     this.socket?.end();
     this.socket = null;
   }
@@ -180,9 +186,19 @@ export class RemoteActor implements TableActor {
     pending.resolve(message.accion ?? null);
   }
 
+  /** Queues a message; everything queued in the same tick goes out in a single write. */
   protected send(payload: object): void {
-    this.socket?.write(
-      `${JSON.stringify({ ...payload, version: ArenaClient.PROTOCOL_VERSION })}\n`,
-    );
+    if (!this.socket) return;
+    this.outgoing += `${JSON.stringify({ ...payload, version: ArenaClient.PROTOCOL_VERSION })}\n`;
+    if (this.flushScheduled) return;
+    this.flushScheduled = true;
+    setImmediate(() => this.flush());
+  }
+
+  protected flush(): void {
+    this.flushScheduled = false;
+    if (this.outgoing.length === 0) return;
+    this.socket?.write(this.outgoing);
+    this.outgoing = '';
   }
 }

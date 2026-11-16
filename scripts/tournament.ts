@@ -42,13 +42,18 @@ const TournamentFlagEnum = {
   /** Championships played at the same time; each one runs about 18 processes. */
   Parallel: 'parallel',
 } as const;
-const TournamentCommandEnum = { Run: 'run', Report: 'report' } as const;
+const TournamentCommandEnum = {
+  Run: 'run',
+  Report: 'report',
+  /** Internal: plays the single championship of `--seed` in this process. */
+  Play: 'play',
+} as const;
 
 /** The announced number of teams. */
 const teams = 30;
 const host = '127.0.0.1';
-/** Championships at once: each one needs about 400 MB and two cores. */
-const defaultParallel = Math.max(1, Math.min(4, Math.floor(cpus().length / 3)));
+/** Championships at once: each one runs in its own process, needs about 250 MB and keeps one and a half cores busy. */
+const defaultParallel = Math.max(1, Math.floor((cpus().length * 2) / 3));
 /** How long bots get to connect before a championship starts. */
 const connectTimeoutMs = 90_000;
 
@@ -313,7 +318,8 @@ const archive = ChampionshipArchive.create(
   resolve(flags.get(TournamentFlagEnum.Out) ?? 'results/championship'),
 );
 
-if (command === TournamentCommandEnum.Run) {
+/** Reads our builds and the rival lineup from the flags, and checks they exist. */
+function readLineup(): { bots: BotBuild[]; rivals: string[] } {
   const bots = parseBots(
     flags.get(TournamentFlagEnum.Bots) ?? 'balatrito=dist/cli.js',
   );
@@ -327,6 +333,41 @@ if (command === TournamentCommandEnum.Run) {
     if (!existsSync(bot.entry))
       throw new Error(`${bot.entry} does not exist; run "pnpm build".`);
   }
+  return { bots, rivals };
+}
+
+/**
+ * Plays one championship in a child process of its own.
+ *
+ * A single process serving every table of several championships spends its time writing to sockets and caps the
+ * throughput long before the cores do; one process per championship spreads that work.
+ */
+function playInChild(seed: number, finalMinutes: number): Promise<void> {
+  const args = [
+    ...process.execArgv,
+    process.argv[1]!,
+    TournamentCommandEnum.Play,
+    ...[`--${TournamentFlagEnum.Seed}`, String(seed)],
+    ...[`--${TournamentFlagEnum.Out}`, archive.getDir()],
+    ...[`--${TournamentFlagEnum.FinalMinutes}`, String(finalMinutes)],
+  ];
+  for (const flag of [TournamentFlagEnum.Bots, TournamentFlagEnum.Rivals]) {
+    const value = flags.get(flag);
+    if (value !== undefined) args.push(`--${flag}`, value);
+  }
+  return new Promise((done, fail) => {
+    const child = spawn(process.execPath, args, { stdio: 'inherit' });
+    child.on('error', fail);
+    child.on('exit', (code) =>
+      code === 0
+        ? done()
+        : fail(new Error(`championship ${seed} exited with code ${code}`)),
+    );
+  });
+}
+
+if (command === TournamentCommandEnum.Run) {
+  const { bots, rivals } = readLineup();
   if (bots.length + rivals.length !== teams) {
     console.warn(
       `tournament: ${bots.length + rivals.length} bots instead of ${teams}`,
@@ -354,7 +395,7 @@ if (command === TournamentCommandEnum.Run) {
       seed !== undefined;
       seed = pending.shift()
     ) {
-      await playChampionship(seed, bots, rivals, archive, finalMinutes);
+      await playInChild(seed, finalMinutes);
       console.log(
         `championship with seed ${seed} done (${++done} of this batch)`,
       );
@@ -362,6 +403,15 @@ if (command === TournamentCommandEnum.Run) {
   };
   await Promise.all(Array.from({ length: parallel }, worker));
   report(archive);
+} else if (command === TournamentCommandEnum.Play) {
+  const { bots, rivals } = readLineup();
+  await playChampionship(
+    Number(flags.get(TournamentFlagEnum.Seed)),
+    bots,
+    rivals,
+    archive,
+    Number(flags.get(TournamentFlagEnum.FinalMinutes) ?? 60),
+  );
 } else if (command === TournamentCommandEnum.Report) {
   report(archive);
 } else {
