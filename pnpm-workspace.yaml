@@ -1,0 +1,5 @@
+savePrefix: ''
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true

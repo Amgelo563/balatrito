@@ -1,0 +1,145 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # long gauntlet every night (07:30 UTC = 02:30 in Lima)
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+    inputs:
+      qualifiers:
+        description: Simulated qualifiers per shard
+        default: '150'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # kit commit to test against; bumped by hand when the organizers publish fixes
+  KIT_REF: 4de6164996796fd70f71f544688f791dcbbb36e0
+
+jobs:
+  check:
+    name: lint, types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  smoke-kit:
+    name: smoke test against the kit
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: aicspucp/pokerfight-arena-participantes
+          ref: ${{ env.KIT_REF }}
+          path: kit
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: kit/go.mod
+          cache-dependency-path: kit/go.mod
+      - name: build the arena and the kit bots
+        working-directory: kit
+        run: go build -o bin/ ./cmd/... ./bots/...
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: play against the kit bots
+        env:
+          KIT_DIR: kit
+          SMOKE_HANDS: ${{ github.event_name == 'pull_request' && '100' || '300' }}
+        shell: bash
+        run: pnpm exec tsx scripts/kitSmoke.ts | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: local championships in the official format
+        env:
+          KIT_DIR: kit
+          CHAMPIONSHIPS: ${{ github.event_name == 'pull_request' && '5' || '30' }}
+        shell: bash
+        run: pnpm exec tsx scripts/tournament.ts run --championships "$CHAMPIONSHIPS" --out results/championship | sed -n '/^## /,$p' | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-kit
+          path: results
+          if-no-files-found: ignore
+
+  gauntlet:
+    name: gauntlet ${{ matrix.mix }} ${{ matrix.shard }}
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mix: [mixed, strong, tight, wild]
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: simulate qualifiers
+        env:
+          QUALIFIERS: ${{ inputs.qualifiers || (github.event_name == 'pull_request' && '40' || '150') }}
+        run: >
+          pnpm exec tsx scripts/gauntlet.ts run
+          --mix ${{ matrix.mix }}
+          --seed ${{ matrix.shard }}
+          --qualifiers "$QUALIFIERS"
+          --out gauntlet/${{ matrix.mix }}-${{ matrix.shard }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gauntlet-${{ matrix.mix }}-${{ matrix.shard }}
+          path: gauntlet
+
+  gauntlet-report:
+    name: gauntlet report
+    needs: gauntlet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gauntlet-*
+          path: gauntlet
+          merge-multiple: true
+      - name: merge results and apply the threshold
+        shell: bash
+        run: pnpm exec tsx scripts/gauntlet.ts report --dir gauntlet | tee -a "$GITHUB_STEP_SUMMARY"

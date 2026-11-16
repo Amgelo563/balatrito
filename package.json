@@ -1,0 +1,50 @@
+{
+  "name": "balatrito",
+  "version": "0.0.0",
+  "private": true,
+  "description": "No-Limit Texas Hold'em bot for PokerFight (AICS PUCP).",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "build": "rimraf dist && tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"{src,__tests__,scripts}/**/*.ts\"",
+    "format:check": "prettier --check \"{src,__tests__,scripts}/**/*.ts\"",
+    "check": "pnpm lint && pnpm format:check",
+    "fix": "pnpm lint:fix && pnpm format",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "gauntlet": "tsx scripts/gauntlet.ts",
+    "smoke:kit": "tsx scripts/kitSmoke.ts",
+    "tournament": "tsx scripts/tournament.ts",
+    "losses": "tsx scripts/analysis/losses.ts",
+    "paired": "tsx scripts/analysis/paired.ts",
+    "busts": "tsx scripts/analysis/busts.ts",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^5.1.0",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-only-warn": "^1.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "rimraf": "^6.1.4",
+    "tsc-files": "^1.1.4",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}
