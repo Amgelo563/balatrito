@@ -57,3 +57,75 @@ describe('PreflopStrategy (deep re-raises)', () => {
     expect([ActionTypeEnum.AllIn, ActionTypeEnum.Raise]).toContain(action.tipo);
   });
 });
+
+describe('PreflopStrategy (heads-up)', () => {
+  const allActions = [
+    ActionTypeEnum.Fold,
+    ActionTypeEnum.Call,
+    ActionTypeEnum.Raise,
+    ActionTypeEnum.AllIn,
+  ];
+
+  /** We hold the button, which posts the small blind and acts first. */
+  const smallBlind = (hole: string): Turn => {
+    const state = makeState({
+      etapa: StreetEnum.Preflop,
+      pozo: 150,
+      apuesta_actual: 100,
+      posicion_boton: 0,
+    });
+    state.jugadores[0]!.apuesta_ronda = 50;
+    state.jugadores[1]!.apuesta_ronda = 100;
+    return new Turn({
+      state,
+      hole: parseCards(hole),
+      validActions: allActions,
+      myId: FixtureEnum.Me,
+    });
+  };
+
+  /** The rival on the button raised to three big blinds. */
+  const bigBlindFacingRaise = (hole: string): Turn => {
+    const state = makeState({
+      etapa: StreetEnum.Preflop,
+      pozo: 400,
+      apuesta_actual: 300,
+      subida_minima: 200,
+      posicion_boton: 1,
+      historial_acciones: [
+        {
+          id_jugador: FixtureEnum.Rival,
+          etapa: StreetEnum.Preflop,
+          accion: { tipo: ActionTypeEnum.Raise, monto: 300 },
+        },
+      ],
+    });
+    state.jugadores[0]!.apuesta_ronda = 100;
+    state.jugadores[1]!.apuesta_ronda = 300;
+    return new Turn({
+      state,
+      hole: parseCards(hole),
+      validActions: allActions,
+      myId: FixtureEnum.Me,
+    });
+  };
+
+  const decide = (turn: Turn) =>
+    BalatritoPolicy.create({ seed: 1, iterations: 500 }).decide(turn).tipo;
+
+  test('GIVEN a below-average hand in the small blind WHEN heads-up THEN it raises', () => {
+    expect(decide(smallBlind('Kc 4d'))).toBe(ActionTypeEnum.Raise);
+  });
+
+  test('GIVEN a weak hand in the small blind WHEN heads-up THEN it completes instead of folding', () => {
+    expect(decide(smallBlind('9c 5d'))).toBe(ActionTypeEnum.Call);
+  });
+
+  test('GIVEN one of the worst hands in the small blind WHEN heads-up THEN it folds', () => {
+    expect(decide(smallBlind('7c 2d'))).toBe(ActionTypeEnum.Fold);
+  });
+
+  test('GIVEN a below-average hand in the big blind facing a small raise WHEN heads-up THEN it defends', () => {
+    expect(decide(bigBlindFacingRaise('Kc 2d'))).toBe(ActionTypeEnum.Call);
+  });
+});

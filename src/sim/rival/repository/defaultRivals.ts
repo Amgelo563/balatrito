@@ -22,6 +22,9 @@ import { LlmArchetype } from '../archetype/archetypes/LlmArchetype.js';
 import { SolverArchetype } from '../archetype/archetypes/SolverArchetype.js';
 import { SurvivorArchetype } from '../archetype/archetypes/SurvivorArchetype.js';
 import { SpyPlusArchetype } from '../archetype/archetypes/SpyPlusArchetype.js';
+import { SqueezerArchetype } from '../archetype/archetypes/SqueezerArchetype.js';
+import { SwitcherArchetype } from '../archetype/archetypes/SwitcherArchetype.js';
+import { DesperadoArchetype } from '../archetype/archetypes/DesperadoArchetype.js';
 
 /** Returns every rival known to the project: the TypeScript archetypes and the kit's bots. */
 export function defaultRivals(): Rival[] {
@@ -48,6 +51,9 @@ export function defaultRivals(): Rival[] {
     new SolverArchetype(),
     new SurvivorArchetype(),
     new SpyPlusArchetype(),
+    new SwitcherArchetype(),
+    new SqueezerArchetype(),
+    new DesperadoArchetype(),
     ...kitRivals,
   ];
 }

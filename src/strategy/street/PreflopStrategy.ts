@@ -15,6 +15,14 @@ export class PreflopStrategy {
   protected readonly services: StrategyServices;
   /** Stack depth, in big blinds, under which the only raise is all-in. */
   protected readonly pushFoldDepth = 14;
+  /** Share of hands the small blind raises heads-up: with one rival left, folding the blind away is the costliest leak. */
+  protected readonly headsUpOpenWidth = 0.6;
+  /** Lowest percentile the small blind completes with heads-up, below the hands it raises. */
+  protected readonly headsUpCompleteFloor = 0.2;
+  /** Share of hands the big blind defends heads-up against one small raise. */
+  protected readonly headsUpDefendWidth = 0.65;
+  /** Largest raise, in big blinds to call, that the big blind defends that wide. */
+  protected readonly headsUpDefendCall = 2.5;
 
   constructor(options: PreflopStrategyOptions) {
     this.services = options.services;
@@ -105,7 +113,11 @@ export class PreflopStrategy {
         : this.note(DecisionReasonEnum.Fold, turn.checkOrFold());
     }
 
-    let width = clamp(0.5 - 0.08 * behind, 0.12, 0.5) * looseness * steal;
+    const headsUp = position.seated === 2;
+    let width =
+      clamp(headsUp ? this.headsUpOpenWidth : 0.5 - 0.08 * behind, 0.12, 0.6)
+      * looseness
+      * steal;
     if (limpers > 0) width *= 0.75;
     if (percentile >= 1 - width && turn.canRaise()) {
       return this.note(
@@ -121,7 +133,8 @@ export class PreflopStrategy {
       && turn.getToCall() <= 0.03 * turn.getCeiling();
     // the small blind completes for half a blind; limping behind for a whole one needs more
     const half = turn.getToCall() < bigBlind;
-    return cheap && percentile >= (half ? 0.5 : 0.75)
+    const floor = half ? (headsUp ? this.headsUpCompleteFloor : 0.5) : 0.75;
+    return cheap && percentile >= floor
       ? this.note(DecisionReasonEnum.Complete, turn.callOrCheck())
       : this.note(DecisionReasonEnum.Fold, turn.fold());
   }
@@ -208,6 +221,14 @@ export class PreflopStrategy {
     const closing =
       turn.getMe().apuesta_ronda >= bigBlind && toCall <= 1.5 * bigBlind;
     if (closing && raises === 1) callWidth = Math.max(callWidth, 0.5);
+    // heads-up the small blind raises most hands, so the big blind must defend most of them
+    const headsUpDefense =
+      position.seated === 2
+      && raises === 1
+      && toCall <= this.headsUpDefendCall * bigBlind;
+    if (headsUpDefense) {
+      callWidth = Math.max(callWidth, this.headsUpDefendWidth);
+    }
     const affordable = toCall <= 0.1 * ceiling;
     return affordable && percentile >= 1 - callWidth
       ? this.note(DecisionReasonEnum.CallRaise, turn.callOrCheck())

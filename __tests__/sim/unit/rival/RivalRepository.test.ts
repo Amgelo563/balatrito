@@ -11,6 +11,8 @@ import { TagArchetype } from '../../../../src/sim/rival/archetype/archetypes/Tag
 import { ExploiterArchetype } from '../../../../src/sim/rival/archetype/archetypes/ExploiterArchetype.js';
 import { SolverArchetype } from '../../../../src/sim/rival/archetype/archetypes/SolverArchetype.js';
 import { SpyPlusArchetype } from '../../../../src/sim/rival/archetype/archetypes/SpyPlusArchetype.js';
+import { SqueezerArchetype } from '../../../../src/sim/rival/archetype/archetypes/SqueezerArchetype.js';
+import { DesperadoArchetype } from '../../../../src/sim/rival/archetype/archetypes/DesperadoArchetype.js';
 import { NitArchetype } from '../../../../src/sim/rival/archetype/archetypes/NitArchetype.js';
 import { UnknownRivalError } from '../../../../src/sim/rival/repository/UnknownRivalError.js';
 import { KitRivalNameEnum } from '../../../../src/sim/rival/kit/KitRivalNameEnum.js';
@@ -19,9 +21,9 @@ import { BotFlagEnum } from '../../../../src/launch/BotFlagEnum.js';
 describe('RivalRepository (getNames)', () => {
   const repository = RivalRepository.create();
 
-  test('GIVEN the default rivals WHEN listed THEN the 22 archetypes play in memory and the kit bots do not', () => {
+  test('GIVEN the default rivals WHEN listed THEN the 25 archetypes play in memory and the kit bots do not', () => {
     const inMemory = repository.getNames({ inMemory: true });
-    expect(inMemory).toHaveLength(22);
+    expect(inMemory).toHaveLength(25);
     expect(inMemory).not.toContain(KitRivalNameEnum.Darwin);
     expect(repository.getNames({ field: RivalFieldEnum.Kit })).toHaveLength(7);
   });
@@ -37,6 +39,8 @@ describe('RivalRepository (getNames)', () => {
       BarrelerArchetype.NAME,
       SolverArchetype.NAME,
       SpyPlusArchetype.NAME,
+      SqueezerArchetype.NAME,
+      DesperadoArchetype.NAME,
     ]);
     expect(repository.getNames({ field: RivalFieldEnum.Smoke })).toEqual([
       KitRivalNameEnum.Base,
